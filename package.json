@@ -1,4 +1,5 @@
 {
+  "name": "mesh-messager-core",
   "scripts": {
     "coverage": "nyc -r lcov -r text -e .ts -x \"src/*.spec.ts\" yarn test",
     "build": "tsc",
@@ -22,5 +23,6 @@
   "dependencies": {
     "bigint-hash": "^0.2.2",
     "lodash": "^4.17.15"
-  }
+  },
+  "version": "0.0.1"
 }
