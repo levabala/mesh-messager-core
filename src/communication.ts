@@ -1,18 +1,21 @@
-import { Id } from './node';
+import { Id, Node, StoragePiece } from './node';
 
-enum RequestType {
-  GetSuccessorForKey,
-  GetSuccessorId
+export enum RequestType {
+  FindSuccessorForId,
+  GetSuccessorId,
+  GetStorageValue
 }
 
 interface RequestData {
-  [RequestType.GetSuccessorForKey]: { key: Id };
+  [RequestType.FindSuccessorForId]: { key: Id };
   [RequestType.GetSuccessorId]: {};
+  [RequestType.GetStorageValue]: { key: string };
 }
 
 interface ResponseData {
-  [RequestType.GetSuccessorForKey]: { id: Id };
+  [RequestType.FindSuccessorForId]: { id: Id };
   [RequestType.GetSuccessorId]: { id: Id };
+  [RequestType.GetStorageValue]: { value: StoragePiece };
 }
 
 type Request<Req extends RequestType> = (
@@ -21,6 +24,6 @@ type Request<Req extends RequestType> = (
   data: RequestData[Req]
 ) => Promise<ResponseData[Req]>;
 
-export interface Communication {
-  [RequestType.GetSuccessorForKey]: Req;
-}
+export type Communication = {
+  [key in RequestType]: Request<key>;
+};
