@@ -85,16 +85,18 @@ export class Node implements NodeShell, NodeBody {
   }
 
   async findSuccessorForKey(key: Id): Promise<Id> {
-    if (
+    const within =
       withinInterval(key, {
         start: this.id,
         end: this.successor,
         includeStart: true
-      })
-    )
-      return this.successor;
+      }) || this.id === this.successor;
+
+    if (within) return this.successor;
 
     const preNodeId = this.getClosestPrecedingNode(key);
+    if (preNodeId === this.id) return this.id;
+
     return await this.requestSuccessor(preNodeId, key);
   }
 

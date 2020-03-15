@@ -1,8 +1,6 @@
 {
   "name": "mesh-messager-core",
-  "files": [
-    "./build/*"
-  ],
+  "main": "./src/index.ts",
   "scripts": {
     "coverage": "nyc -r lcov -r text -e .ts -x \"src/*.spec.ts\" yarn test",
     "build": "tsc",
