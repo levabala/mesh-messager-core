@@ -1,6 +1,6 @@
 import { findLastIndex } from 'lodash';
 
-import { getHash } from './assembly/bigintHash';
+import { getRandomHash } from './assembly/bigintHash';
 import { Interval, withinInterval } from './assembly/interval';
 import { shell } from './assembly/utility';
 import { Communication, RequestType } from './communication';
@@ -8,7 +8,7 @@ import { Communication, RequestType } from './communication';
 export type Id = bigint;
 export type IntervalId = Interval<Id>;
 
-const KEY_BITS = 160; // sha1 contains 160 bits
+const KEY_BITS = 6; // sha1 contains 160 bits
 
 export interface NodeShell {
   id: Id;
@@ -37,9 +37,11 @@ export class Node implements NodeShell, NodeBody {
 
   comm: Communication;
 
+  logging = true;
+
   constructor(
     comm: Communication,
-    id: Id = getHash(Math.random().toString()),
+    id: Id = getRandomHash(KEY_BITS),
     successor: Id = id
   ) {
     this.comm = comm;
@@ -51,16 +53,23 @@ export class Node implements NodeShell, NodeBody {
     this.storage = {};
   }
 
+  setLogging(val: boolean) {
+    this.logging = val;
+
+    return this;
+  }
+
   get successor() {
     return this._successor;
   }
 
   set successor(succ) {
-    console.log(
-      `${Node.shortId(this.id)} has changed successor: ${Node.shortId(
-        this._successor
-      )} -> ${Node.shortId(succ)}`
-    );
+    if (this.logging)
+      console.log(
+        `${Node.shortId(this.id)} has changed successor: ${Node.shortId(
+          this._successor
+        )} -> ${Node.shortId(succ)}`
+      );
     this._successor = succ;
   }
 
@@ -69,11 +78,12 @@ export class Node implements NodeShell, NodeBody {
   }
 
   set predecessor(pred) {
-    console.log(
-      `${Node.shortId(this.id)} has changed predecessor: ${Node.shortId(
-        this._predecessor
-      )} -> ${Node.shortId(pred)}`
-    );
+    if (this.logging)
+      console.log(
+        `${Node.shortId(this.id)} has changed predecessor: ${Node.shortId(
+          this._predecessor
+        )} -> ${Node.shortId(pred)}`
+      );
     this._predecessor = pred;
   }
 
@@ -110,20 +120,34 @@ export class Node implements NodeShell, NodeBody {
     return this.fingers[fingerIndex].nodeId;
   }
 
+  // getClosestSuccessingNode(key: Id): Id {
+  //   const fingerIndex = findIndex(this.fingers, ({ nodeId }) =>
+  //     withinInterval(nodeId, { start: this.id, end: key })
+  //   );
+
+  //   if (fingerIndex === -1) return this.id;
+
+  //   return this.fingers[fingerIndex].nodeId;
+  // }
+
   async findSuccessorForKey(key: Id): Promise<Id> {
-    const within =
-      withinInterval(key, {
-        start: this.id,
-        end: this.successor,
-        includeStart: true
-      }) || this.id === this.successor;
+    const within = withinInterval(key, {
+      start: this.id,
+      end: this.successor,
+      includeEnd: true
+    });
 
     if (within) return this.successor;
 
     const preNodeId = this.getClosestPrecedingNode(key);
     if (preNodeId === this.id) return this.id;
 
-    return await this.requestSuccessor(preNodeId, key);
+    try {
+      return await this.requestSuccessor(preNodeId, key);
+    } catch (e) {
+      // return this.getClosestSuccessingNode(this.id);
+      return this.id;
+    }
   }
 
   createFingerTable(): FingerEntity[] {
@@ -139,9 +163,9 @@ export class Node implements NodeShell, NodeBody {
     return (this.id + 2n ** BigInt(fingerIndex)) % 2n ** BigInt(KEY_BITS);
   }
 
-  static shortId(id: any) {
+  static shortId(id: any, rev = false) {
     const s = (id || "").toString() as string;
-    return s.slice(0, 5);
+    return rev ? s.slice(s.length - 6, s.length) : s.slice(0, 5);
   }
 
   async joinNode(targetNodeId: Id) {
@@ -155,27 +179,59 @@ export class Node implements NodeShell, NodeBody {
   }
 
   toString(): string {
-    return `pre: ${Node.shortId(this.predecessor)} node: ${Node.shortId(
-      this.id
-    )} succ: ${Node.shortId(this.successor)}`;
+    return `${(this.successor === this.id && !this.predecessor
+      ? "(dead)"
+      : ""
+    ).padStart(7)} pre: ${Node.shortId(this.predecessor).padStart(
+      7
+    )} node: ${Node.shortId(this.id).padStart(5)} succ: ${Node.shortId(
+      this.successor
+    ).padStart(5)}`;
   }
 
   async stabilize() {
-    if (this.successor === this.id) return;
+    if (this.successor === this.id) {
+      if (this.predecessor) {
+        try {
+          this.successor = await this.requestSuccessor(
+            this.predecessor,
+            this.id
+          );
+        } catch (e) {
+          this.predecessor = undefined;
+        }
+      }
+      return;
+    }
 
-    const { id: preId } = await this.comm[RequestType.GetPredecessor](
-      this,
-      this.successor,
-      {}
-    );
+    try {
+      const { id: preId } = await this.comm[RequestType.GetPredecessor](
+        this,
+        this.successor,
+        {}
+      );
 
-    if (preId && withinInterval(preId, { start: this.id, end: this.successor }))
-      this.successor = preId;
+      if (
+        preId &&
+        withinInterval(preId, { start: this.id, end: this.successor })
+      )
+        this.successor = preId;
 
-    // console.log(
-    //   `${Node.shortId(this.id)} notifies ${Node.shortId(this.successor)}`
-    // );
-    await this.comm[RequestType.Notify](this, this.successor, { key: this.id });
+      // if (this.logging) console.log(
+      //   `${Node.shortId(this.id)} notifies ${Node.shortId(this.successor)}`
+      // );
+      await this.comm[RequestType.Notify](this, this.successor, {
+        key: this.id
+      });
+    } catch (e) {
+      if (this.logging)
+        console.log(
+          `${Node.shortId(
+            this.id
+          )} has failed to access successor (${Node.shortId(this.successor)})`
+        );
+      this.successor = this.id;
+    }
   }
 
   notify(id: bigint) {
@@ -190,14 +246,18 @@ export class Node implements NodeShell, NodeBody {
     let counter = 0;
 
     while (true) {
-      // console.log(
+      // if (this.logging) console.log(
       //   `${Node.shortId(this.id)} fixes finger for ${Node.shortId(
       //     this.fingers[counter].key
       //   )} (${counter})`
       // );
+
       this.fingers[counter].nodeId = await this.findSuccessorForKey(
         this.fingers[counter].key
       );
+      // this.fingers[counter].nodeId = await this.findSuccessorForKey(
+      //   this.id + 2n ** BigInt(counter)
+      // );
 
       counter = (counter + 1) % (this.fingers.length - 1);
       // counter++;
@@ -210,12 +270,19 @@ export class Node implements NodeShell, NodeBody {
   fixFingers = this.fixFingersGenerator();
 
   async checkPredecessor() {
-    return this.comm[RequestType.Ping](this, this.successor, {}).catch(
+    if (!this.predecessor) return;
+
+    return this.comm[RequestType.Ping](this, this.predecessor, {}).catch(
       () => (this.predecessor = undefined)
     );
   }
 
   private lifecycleActive = false;
+  private lifecycleTimeouts = {
+    stab: (null as unknown) as NodeJS.Timeout,
+    fing: (null as unknown) as NodeJS.Timeout,
+    pred: (null as unknown) as NodeJS.Timeout
+  };
   startLifecycle(
     periodStabilize = 500,
     periodFixFingers = 20,
@@ -227,20 +294,33 @@ export class Node implements NodeShell, NodeBody {
 
     const tickStabilize = async () => {
       await this.stabilize();
-      setTimeout(tickStabilize, periodStabilize);
+      this.lifecycleTimeouts.stab = global.setTimeout(
+        tickStabilize,
+        periodStabilize
+      );
     };
     tickStabilize();
 
     const tickFixFingers = async () => {
       await this.fixFingers.next();
-      setTimeout(tickFixFingers, periodFixFingers);
+      this.lifecycleTimeouts.fing = global.setTimeout(
+        tickFixFingers,
+        periodFixFingers
+      );
     };
     tickFixFingers();
 
     const tickCheckPredecessor = async () => {
       await this.checkPredecessor();
-      setTimeout(tickCheckPredecessor, periodCheckPredecessor);
+      this.lifecycleTimeouts.pred = global.setTimeout(
+        tickCheckPredecessor,
+        periodCheckPredecessor
+      );
     };
     tickCheckPredecessor();
+  }
+
+  stopLifecycle() {
+    Object.values(this.lifecycleTimeouts).forEach(t => clearTimeout(t));
   }
 }

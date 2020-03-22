@@ -8,7 +8,8 @@
     "@typescript-eslint/rule-name": "off",
     "@typescript-eslint/explicit-function-return-type": "off",
     "@typescript-eslint/no-explicit-any": "off",
-    "@typescript-eslint/no-misused-promises": "off"
+    "@typescript-eslint/no-misused-promises": "off",
+    "@typescript-eslint/ban-ts-ignore": "off"
   },
   "extends": [
     "eslint:recommended",
