@@ -5,6 +5,7 @@ export enum RequestType {
   GetSuccessorId,
   GetStorageValue,
   GetPredecessor,
+  GetSuccessorsList,
   Notify,
   Ping
 }
@@ -13,6 +14,7 @@ interface RequestData {
   [RequestType.FindSuccessorForId]: { key: Id };
   [RequestType.GetSuccessorId]: {};
   [RequestType.GetPredecessor]: {};
+  [RequestType.GetSuccessorsList]: {};
   [RequestType.Ping]: {};
   [RequestType.Notify]: { key: Id };
   [RequestType.GetStorageValue]: { key: string };
@@ -22,6 +24,7 @@ interface ResponseData {
   [RequestType.FindSuccessorForId]: { id: Id };
   [RequestType.GetSuccessorId]: { id: Id };
   [RequestType.GetPredecessor]: { id: Id | undefined };
+  [RequestType.GetSuccessorsList]: { list: Id[] };
   [RequestType.Notify]: {};
   [RequestType.Ping]: {};
   [RequestType.GetStorageValue]: { value: StoragePiece };

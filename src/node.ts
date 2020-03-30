@@ -8,7 +8,8 @@ import { Communication, RequestType } from './communication';
 export type Id = bigint;
 export type IntervalId = Interval<Id>;
 
-const KEY_BITS = 6; // sha1 contains 160 bits
+const KEY_BITS = 8; // sha1 contains 160 bits
+const MAX_SUCCESSORS_LIST_LENGTH = Math.ceil(Math.log(KEY_BITS));
 
 export interface NodeShell {
   id: Id;
@@ -32,6 +33,7 @@ export class Node implements NodeShell, NodeBody {
   id: Id;
   private _successor: Id;
   private _predecessor: Id | undefined;
+  successorList: Id[] = [];
   fingers: FingerEntity[];
   storage: Record<string, StoragePiece>;
 
@@ -44,6 +46,8 @@ export class Node implements NodeShell, NodeBody {
     id: Id = getRandomHash(KEY_BITS),
     successor: Id = id
   ) {
+    if (!id) debugger;
+
     this.comm = comm;
 
     this.id = id;
@@ -70,7 +74,13 @@ export class Node implements NodeShell, NodeBody {
           this._successor
         )} -> ${Node.shortId(succ)}`
       );
+
+    const index = this.successorList.indexOf(this._successor);
+    if (index !== -1) this.successorList.splice(index, 1);
+
     this._successor = succ;
+
+    if (!this.successorList.includes(succ)) this.updateSuccesorsList(succ);
   }
 
   get predecessor() {
@@ -85,6 +95,24 @@ export class Node implements NodeShell, NodeBody {
         )} -> ${Node.shortId(pred)}`
       );
     this._predecessor = pred;
+  }
+
+  private updateSuccesorsList(...newList: Id[]) {
+    this.successorList = Array.from(new Set(newList.concat(this.successorList)))
+      .sort((n1, n2) => {
+        const n1Next = n1 > this.id;
+        const n2Next = n2 > this.id;
+        if ((n1Next && n2Next) || (!n1Next && !n2Next))
+          return n1 - n2 >= 0 ? 1 : -1;
+
+        if (n1Next && !n2Next) return -1;
+        else return 1;
+      })
+      .slice(0, MAX_SUCCESSORS_LIST_LENGTH);
+  }
+
+  private getBestSuccessor() {
+    return this.successorList[0] || this.id;
   }
 
   async requestSuccessor(targetNode: Id, key: Id): Promise<Id> {
@@ -186,21 +214,24 @@ export class Node implements NodeShell, NodeBody {
       7
     )} node: ${Node.shortId(this.id).padStart(5)} succ: ${Node.shortId(
       this.successor
-    ).padStart(5)}`;
+    ).padStart(5)} succList: ${this.successorList
+      .map(id => Node.shortId(id))
+      .toString()
+      .padStart(20)}`;
   }
 
   async stabilize() {
     if (this.successor === this.id) {
-      if (this.predecessor) {
-        try {
-          this.successor = await this.requestSuccessor(
-            this.predecessor,
-            this.id
-          );
-        } catch (e) {
-          this.predecessor = undefined;
-        }
-      }
+      // if (this.predecessor) {
+      //   try {
+      //     this.successor = await this.requestSuccessor(
+      //       this.predecessor,
+      //       this.id
+      //     );
+      //   } catch (e) {
+      //     this.predecessor = undefined;
+      //   }
+      // }
       return;
     }
 
@@ -223,6 +254,11 @@ export class Node implements NodeShell, NodeBody {
       await this.comm[RequestType.Notify](this, this.successor, {
         key: this.id
       });
+
+      const { list: newSuccList } = await this.comm[
+        RequestType.GetSuccessorsList
+      ](this, this.successor, {});
+      this.updateSuccesorsList(...newSuccList);
     } catch (e) {
       if (this.logging)
         console.log(
@@ -230,7 +266,8 @@ export class Node implements NodeShell, NodeBody {
             this.id
           )} has failed to access successor (${Node.shortId(this.successor)})`
         );
-      this.successor = this.id;
+
+      this.successor = this.getBestSuccessor();
     }
   }
 
@@ -252,16 +289,14 @@ export class Node implements NodeShell, NodeBody {
       //   )} (${counter})`
       // );
 
-      this.fingers[counter].nodeId = await this.findSuccessorForKey(
-        this.fingers[counter].key
-      );
       // this.fingers[counter].nodeId = await this.findSuccessorForKey(
-      //   this.id + 2n ** BigInt(counter)
+      //   this.fingers[counter].key
       // );
+      this.fingers[counter].nodeId = await this.findSuccessorForKey(
+        this.id + 2n ** BigInt(counter)
+      );
 
       counter = (counter + 1) % (this.fingers.length - 1);
-      // counter++;
-      // if (counter >= this.fingers.length) counter = 0;
 
       yield;
     }
@@ -285,7 +320,7 @@ export class Node implements NodeShell, NodeBody {
   };
   startLifecycle(
     periodStabilize = 500,
-    periodFixFingers = 20,
+    periodFixFingers = 500,
     periodCheckPredecessor = 1000
   ) {
     if (this.lifecycleActive) return;
