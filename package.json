@@ -9,7 +9,8 @@
     "build": "tsc",
     "build_watch": "tsc -w",
     "start": "ts-node-dev --files src/main.ts",
-    "start_watch": "ts-node-dev --files --respawn src/main.ts"
+    "start_watch": "ts-node-dev --files --respawn src/main.ts",
+    "postinstall": "yarn build"
   },
   "devDependencies": {
     "@babel/core": "^7.8.7",
@@ -34,5 +35,5 @@
     "lodash": "^4.17.15",
     "random-bigint": "^0.0.1"
   },
-  "version": "0.0.3"
+  "version": "0.0.4"
 }
