@@ -31,11 +31,13 @@ export interface NodeBody {
 
 export class Node implements NodeShell, NodeBody {
   id: Id;
-  private _successor: Id;
-  private _predecessor: Id | undefined;
+  _successor: Id;
+  _predecessor: Id | undefined;
   successorList: Id[] = [];
   fingers: FingerEntity[];
   storage: Record<string, StoragePiece>;
+
+  dead = false;
 
   comm: Communication;
 
@@ -46,8 +48,6 @@ export class Node implements NodeShell, NodeBody {
     id: Id = getRandomHash(KEY_BITS),
     successor: Id = id
   ) {
-    if (!id) debugger;
-
     this.comm = comm;
 
     this.id = id;
@@ -79,6 +79,7 @@ export class Node implements NodeShell, NodeBody {
     if (index !== -1) this.successorList.splice(index, 1);
 
     this._successor = succ;
+    this.dead = this.successor === this.id && !this.predecessor;
 
     if (!this.successorList.includes(succ)) this.updateSuccesorsList(succ);
   }
@@ -95,9 +96,10 @@ export class Node implements NodeShell, NodeBody {
         )} -> ${Node.shortId(pred)}`
       );
     this._predecessor = pred;
+    this.dead = this.successor === this.id && !this.predecessor;
   }
 
-  private updateSuccesorsList(...newList: Id[]) {
+  updateSuccesorsList(...newList: Id[]) {
     this.successorList = Array.from(new Set(newList.concat(this.successorList)))
       .sort((n1, n2) => {
         const n1Next = n1 > this.id;
@@ -111,7 +113,7 @@ export class Node implements NodeShell, NodeBody {
       .slice(0, MAX_SUCCESSORS_LIST_LENGTH);
   }
 
-  private getBestSuccessor() {
+  getBestSuccessor() {
     return this.successorList[0] || this.id;
   }
 
@@ -207,14 +209,13 @@ export class Node implements NodeShell, NodeBody {
   }
 
   toString(): string {
-    return `${(this.successor === this.id && !this.predecessor
-      ? "(dead)"
-      : ""
-    ).padStart(7)} pre: ${Node.shortId(this.predecessor).padStart(
-      7
-    )} node: ${Node.shortId(this.id).padStart(5)} succ: ${Node.shortId(
-      this.successor
-    ).padStart(5)} succList: ${this.successorList
+    return `${(this.dead ? "(dead)" : "").padStart(7)} pre: ${Node.shortId(
+      this.predecessor
+    ).padStart(7)} node: ${Node.shortId(this.id).padStart(
+      5
+    )} succ: ${Node.shortId(this.successor).padStart(
+      5
+    )} succList: ${this.successorList
       .map(id => Node.shortId(id))
       .toString()
       .padStart(20)}`;
@@ -267,6 +268,9 @@ export class Node implements NodeShell, NodeBody {
           )} has failed to access successor (${Node.shortId(this.successor)})`
         );
 
+      const index = this.successorList.indexOf(this.successor);
+      if (index !== -1) this.successorList.splice(index, 1);
+
       this.successor = this.getBestSuccessor();
     }
   }
@@ -307,13 +311,13 @@ export class Node implements NodeShell, NodeBody {
   async checkPredecessor() {
     if (!this.predecessor) return;
 
-    return this.comm[RequestType.Ping](this, this.predecessor, {}).catch(
-      () => (this.predecessor = undefined)
-    );
+    return this.comm[RequestType.Ping](this, this.predecessor, {}).catch(() => {
+      this.predecessor = undefined;
+    });
   }
 
-  private lifecycleActive = false;
-  private lifecycleTimeouts = {
+  lifecycleActive = false;
+  lifecycleTimeouts = {
     stab: (null as unknown) as NodeJS.Timeout,
     fing: (null as unknown) as NodeJS.Timeout,
     pred: (null as unknown) as NodeJS.Timeout

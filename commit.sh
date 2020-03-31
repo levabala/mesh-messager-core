@@ -1,3 +1,5 @@
+yarn version --patch
+
 message=${1:-update}
 
 git add ./
