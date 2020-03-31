@@ -10,9 +10,10 @@
     "build_watch": "tsc -w",
     "start": "ts-node-dev --files src/main.ts",
     "start_watch": "ts-node-dev --files --respawn src/main.ts",
-    "postinstall": "yarn install && yarn build"
+    "postinstall": "yarn build"
   },
-  "devDependencies": {
+  "devDependencies": {},
+  "dependencies": {
     "@babel/core": "^7.8.7",
     "@babel/preset-env": "^7.8.7",
     "@types/lodash": "^4.14.149",
@@ -20,20 +21,18 @@
     "@typescript-eslint/eslint-plugin": "^2.20.0",
     "@typescript-eslint/parser": "^2.20.0",
     "babel-jest": "^25.1.0",
-    "eslint": "^6.8.0",
-    "jest": "^25.1.0",
-    "nodemon": "^2.0.2",
-    "nyc": "^15.0.0",
-    "ts-node": "^8.6.2",
-    "typescript": "^3.7.5"
-  },
-  "dependencies": {
     "bigint-buffer": "^1.1.5",
     "bigint-hash": "^0.2.2",
     "biguint-format": "^1.0.1",
+    "eslint": "^6.8.0",
+    "jest": "^25.1.0",
     "keccak": "^3.0.0",
     "lodash": "^4.17.15",
-    "random-bigint": "^0.0.1"
+    "nodemon": "^2.0.2",
+    "nyc": "^15.0.0",
+    "random-bigint": "^0.0.1",
+    "ts-node": "^8.6.2",
+    "typescript": "^3.7.5"
   },
-  "version": "0.0.6"
+  "version": "0.0.7"
 }
