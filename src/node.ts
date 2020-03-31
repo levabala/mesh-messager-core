@@ -205,7 +205,11 @@ export class Node implements NodeShell, NodeBody {
       { key: this.id }
     );
 
-    this.successor = id;
+    if (id !== this.id) this.successor = id;
+
+    // await this.comm[RequestType.Notify](this, targetNodeId, {
+    //   key: this.id
+    // });
   }
 
   toString(): string {
@@ -333,33 +337,37 @@ export class Node implements NodeShell, NodeBody {
 
     const tickStabilize = async () => {
       await this.stabilize();
-      this.lifecycleTimeouts.stab = global.setTimeout(
-        tickStabilize,
-        periodStabilize
-      );
+      if (this.lifecycleActive)
+        this.lifecycleTimeouts.stab = global.setTimeout(
+          tickStabilize,
+          periodStabilize
+        );
     };
     tickStabilize();
 
     const tickFixFingers = async () => {
       await this.fixFingers.next();
-      this.lifecycleTimeouts.fing = global.setTimeout(
-        tickFixFingers,
-        periodFixFingers
-      );
+      if (this.lifecycleActive)
+        this.lifecycleTimeouts.fing = global.setTimeout(
+          tickFixFingers,
+          periodFixFingers
+        );
     };
     tickFixFingers();
 
     const tickCheckPredecessor = async () => {
       await this.checkPredecessor();
-      this.lifecycleTimeouts.pred = global.setTimeout(
-        tickCheckPredecessor,
-        periodCheckPredecessor
-      );
+      if (this.lifecycleActive)
+        this.lifecycleTimeouts.pred = global.setTimeout(
+          tickCheckPredecessor,
+          periodCheckPredecessor
+        );
     };
     tickCheckPredecessor();
   }
 
   stopLifecycle() {
     Object.values(this.lifecycleTimeouts).forEach(t => clearTimeout(t));
+    this.lifecycleActive = false;
   }
 }
